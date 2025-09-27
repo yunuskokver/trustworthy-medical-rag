@@ -1,0 +1,25 @@
+# Core libraries
+numpy==1.26.4
+pandas==2.2.2
+
+# Embedding & Transformers
+transformers==4.44.2
+sentence-transformers==3.1.1
+
+# Retrieval
+faiss-cpu==1.8.0
+# If running on GPU, uncomment the line below:
+# faiss-gpu==1.8.0
+
+# Evaluation metrics
+evaluate==0.4.2
+nltk==3.9.1
+
+# OpenAI API (official SDK)
+openai==1.45.0
+python-dotenv==1.0.1
+
+# Utility
+tqdm==4.66.5
+scikit-learn==1.5.2
+pyyaml==6.0.2

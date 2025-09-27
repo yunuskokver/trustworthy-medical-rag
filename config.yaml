@@ -1,0 +1,19 @@
+paths:
+  data_dir: "data"
+  index_path: "data/medquad_faiss.index"
+  train_answers_path: "data/train_answers.jsonl"
+  test_questions_path: "data/test_questions.jsonl"
+  test_answers_path: "data/test_answers.jsonl"
+
+models:
+  embedding_model: "BAAI/bge-small-en"
+  openai_model: "gpt-4"
+
+retrieval:
+  k: 5
+  distance: "l2"
+
+evaluation:
+  test_size: 1000
+  max_output_tokens: 512
+  temperature: 0.0
