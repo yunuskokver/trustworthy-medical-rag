@@ -65,27 +65,3 @@ python src/evaluate.py --config config.yaml
 4. **Generation:** Construct prompt and feed into GPT-4.  
 5. **Evaluation:** Report BLEU-1/2/3/4, ROUGE-L, METEOR, token-level F1, and Exact Match.
 
----
-
-## 📚 Citations
-If you use this code or dataset, please cite:
-
-```bibtex
-@article{yourname2025ragmedicalqa,
-  title={Toward Trustworthy Medical QA: Multi-Metric Evidence for RAG-Enhanced Large Language Models},
-  author={Your Name},
-  journal={PeerJ Computer Science},
-  year={2025}
-}
-```
-
-Dataset:
-```
-Abacha, Asma Ben, and Dina Demner-Fushman. "MedQuAD: Medical Question Answering Dataset." National Library of Medicine, 2019.
-```
-
----
-
-## ⚖️ License & Contribution Guidelines
-- **License:** MIT License (feel free to modify/add the LICENSE file).  
-- **Contributions:** Pull requests and issues are welcome. Please ensure code style consistency and proper documentation in any contribution.  
