@@ -1,97 +1,245 @@
-import os, json, argparse, yaml
-import random
-import nltk, faiss, evaluate
-from sentence_transformers import SentenceTransformer
-from preprocess import normalize_text
-from dotenv import load_dotenv
+import os
+import numpy as np
+import pandas as pd
+from tqdm import tqdm
+
 from openai import OpenAI
+from sentence_transformers import SentenceTransformer
+from bert_score import score as bertscore
+from rouge_score import rouge_scorer
+from nltk.translate.bleu_score import sentence_bleu, SmoothingFunction
+from nltk.translate.meteor_score import meteor_score
+import nltk
 
-# Ensure tokenizers
-nltk.download("punkt", quiet=True)
+from build_index import load_index
+from preprocess import normalize_text
 
-def load_jsonl(path):
-    return [json.loads(l) for l in open(path, encoding="utf-8")]
+nltk.download("punkt")
+nltk.download("wordnet")
+nltk.download("omw-1.4")
 
-def token_f1(pred, ref):
-    pt = nltk.word_tokenize(pred.lower()); rt = nltk.word_tokenize(ref.lower())
-    if not pt or not rt: return 0.0
-    pt_set, rt_set = set(pt), set(rt)
-    inter = len(pt_set & rt_set)
-    if inter == 0: return 0.0
-    precision = inter / len(pt)
-    recall    = inter / len(rt)
-    return 2 * precision * recall / (precision + recall)
+# -----------------------------
 
-def exact_match(pred, ref):
-    return int(pred.strip().lower() == ref.strip().lower())
+# CONFIG
 
-def build_prompt(q, passages):
-    ctx = "\n\n".join(passages)
-    return f"Context:\n{ctx}\n\nQuestion: {q}\nAnswer:"
+# -----------------------------
 
-def generate_answer(client, model_name, question, passages, temperature, max_tokens):
-    prompt = build_prompt(question, passages)
-    r = client.chat.completions.create(
-        model=model_name,
-        messages=[{"role":"user","content":prompt}],
-        temperature=temperature,
-        max_tokens=max_tokens
-    )
-    return r.choices[0].message.content
+MODEL_NAME = "gpt-4"
+TOP_K_VALUES = [1, 3, 5]
 
-def main(cfg):
-    load_dotenv()
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# -----------------------------
 
-    # Load data & index
-    index = faiss.read_index(cfg["paths"]["index_path"])
-    train_answers = [x["answer"] for x in load_jsonl(cfg["paths"]["train_answers_path"])]
-    test_questions = [x["question"] for x in load_jsonl(cfg["paths"]["test_questions_path"])]
-    test_answers   = [x["answer"] for x in load_jsonl(cfg["paths"]["test_answers_path"])]
+# OPENAI
 
-    # Models & params
-    model = SentenceTransformer(cfg["models"]["embedding_model"])
-    k = cfg["retrieval"]["k"]
-    temperature = cfg["evaluation"]["temperature"]
-    max_tokens  = cfg["evaluation"]["max_output_tokens"]
-    lm_name     = cfg["models"]["openai_model"]
+# -----------------------------
 
-    preds, refs = [], []
-    indices = list(range(len(test_questions)))
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    for i in indices:
-        q, ref = test_questions[i], test_answers[i]
-        q_vec = model.encode([q])
-        D, I = index.search(q_vec, k)
-        passages = [train_answers[j] for j in I[0]]
-        pred = generate_answer(client, lm_name, q, passages, temperature, max_tokens)
-        preds.append(pred); refs.append(ref)
+# -----------------------------
 
-    # Metrics
-    bleu_metric   = evaluate.load("bleu")
-    rouge_metric  = evaluate.load("rouge")
-    meteor_metric = evaluate.load("meteor")
+# PROMPT
 
-    bleu = bleu_metric.compute(predictions=preds, references=refs, max_order=4, smooth=True)
-    print("BLEU-1:", bleu["precisions"][0])
-    print("BLEU-2:", bleu["precisions"][1])
-    print("BLEU-3:", bleu["precisions"][2])
-    print("BLEU-4:", bleu["precisions"][3])
+# -----------------------------
 
-    rouge = rouge_metric.compute(predictions=preds, references=refs, rouge_types=["rougeL"])
-    print("ROUGE-L:", rouge["rougeL"])
+def build_prompt(question, contexts):
+context_block = "\n".join([f"Passage {i+1}: {c}" for i, c in enumerate(contexts)])
 
-    meteor = meteor_metric.compute(predictions=preds, references=refs)
-    print("METEOR:", meteor["meteor"])
+```
+return f"""
+```
 
-    f1_scores = [token_f1(p, r) for p, r in zip(preds, refs)]
-    em_scores = [exact_match(p, r) for p, r in zip(preds, refs)]
-    print("Token-level F1 (avg):", sum(f1_scores)/len(f1_scores))
-    print("Exact Match (avg):", sum(em_scores)/len(em_scores))
+Question:
+{question}
 
-if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--config", required=True)
-    args = ap.parse_args()
-    with open(args.config) as f: cfg = yaml.safe_load(f)
-    main(cfg)
+Context:
+{context_block}
+
+Instruction:
+Based on the above context, provide a clear, accurate, and concise medical answer. Do not include information that is not supported by the provided context.
+"""
+
+def generate_answer(messages):
+response = client.chat.completions.create(
+model=MODEL_NAME,
+messages=messages,
+temperature=0.0,
+max_tokens=512
+)
+return response.choices[0].message.content.strip()
+
+# -----------------------------
+
+# METRICS
+
+# -----------------------------
+
+def compute_metrics(pred, ref):
+smoothie = SmoothingFunction().method1
+
+```
+bleu1 = sentence_bleu([ref.split()], pred.split(), weights=(1, 0, 0, 0), smoothing_function=smoothie)
+bleu2 = sentence_bleu([ref.split()], pred.split(), weights=(0.5, 0.5, 0, 0), smoothing_function=smoothie)
+bleu3 = sentence_bleu([ref.split()], pred.split(), weights=(1/3, 1/3, 1/3, 0), smoothing_function=smoothie)
+bleu4 = sentence_bleu([ref.split()], pred.split(), weights=(0.25, 0.25, 0.25, 0.25), smoothing_function=smoothie)
+
+rouge = rouge_scorer.RougeScorer(["rougeL"], use_stemmer=True)
+rouge_l = rouge.score(ref, pred)["rougeL"].fmeasure
+
+meteor = meteor_score([ref.split()], pred.split())
+
+pred_norm = normalize_text(pred)
+ref_norm = normalize_text(ref)
+
+# F1
+pred_tokens = pred_norm.split()
+ref_tokens = ref_norm.split()
+
+common = set(pred_tokens) & set(ref_tokens)
+if len(common) == 0:
+    f1 = 0
+else:
+    precision = len(common) / len(pred_tokens)
+    recall = len(common) / len(ref_tokens)
+    f1 = 2 * precision * recall / (precision + recall)
+
+em = int(pred_norm == ref_norm)
+
+return bleu1, bleu2, bleu3, bleu4, rouge_l, meteor, f1, em
+```
+
+# -----------------------------
+
+# MAIN EVALUATION
+
+# -----------------------------
+
+def evaluate():
+print("Loading index...")
+index, corpus, embed_model = load_index()
+
+```
+print("Loading SBERT model...")
+sbert_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+print("Loading test set...")
+test_df = pd.read_csv("data/test_set.csv")
+
+results = []
+
+for k in TOP_K_VALUES:
+    print(f"\nEvaluating for k={k}")
+
+    preds_baseline = []
+    preds_rag = []
+    refs = []
+
+    for _, row in tqdm(test_df.iterrows(), total=len(test_df)):
+        question = row["question"]
+        reference = row["answer"]
+
+        # -----------------
+        # BASELINE
+        # -----------------
+        baseline_messages = [
+            {"role": "system", "content": "You are a medical assistant."},
+            {"role": "user", "content": question}
+        ]
+        baseline_output = generate_answer(baseline_messages)
+
+        # -----------------
+        # RETRIEVAL
+        # -----------------
+        query_vec = embed_model.encode([question])
+        D, I = index.search(np.array(query_vec).astype("float32"), k)
+
+        contexts = [corpus[i] for i in I[0]]
+
+        # -----------------
+        # RAG
+        # -----------------
+        rag_prompt = build_prompt(question, contexts)
+
+        rag_messages = [
+            {"role": "system", "content": "You are a medical assistant."},
+            {"role": "user", "content": rag_prompt}
+        ]
+
+        rag_output = generate_answer(rag_messages)
+
+        preds_baseline.append(baseline_output)
+        preds_rag.append(rag_output)
+        refs.append(reference)
+
+    # -----------------
+    # METRICS
+    # -----------------
+    print("Computing metrics...")
+
+    bleu1_b, bleu2_b, bleu3_b, bleu4_b = [], [], [], []
+    bleu1_r, bleu2_r, bleu3_r, bleu4_r = [], [], [], []
+    rouge_b, rouge_r = [], []
+    meteor_b, meteor_r = [], []
+    f1_b, f1_r = [], []
+    em_b, em_r = [], []
+
+    for pb, pr, ref in zip(preds_baseline, preds_rag, refs):
+        b1, b2, b3, b4, r, m, f, e = compute_metrics(pb, ref)
+        bleu1_b.append(b1); bleu2_b.append(b2); bleu3_b.append(b3); bleu4_b.append(b4)
+        rouge_b.append(r); meteor_b.append(m); f1_b.append(f); em_b.append(e)
+
+        b1, b2, b3, b4, r, m, f, e = compute_metrics(pr, ref)
+        bleu1_r.append(b1); bleu2_r.append(b2); bleu3_r.append(b3); bleu4_r.append(b4)
+        rouge_r.append(r); meteor_r.append(m); f1_r.append(f); em_r.append(e)
+
+    # -----------------
+    # BERTScore
+    # -----------------
+    _, _, bert_f1_b = bertscore(preds_baseline, refs, lang="en", rescale_with_baseline=True)
+    _, _, bert_f1_r = bertscore(preds_rag, refs, lang="en", rescale_with_baseline=True)
+
+    # -----------------
+    # SBERT
+    # -----------------
+    emb_b = sbert_model.encode(preds_baseline, normalize_embeddings=True)
+    emb_r = sbert_model.encode(preds_rag, normalize_embeddings=True)
+    emb_ref = sbert_model.encode(refs, normalize_embeddings=True)
+
+    sbert_b = np.sum(emb_b * emb_ref, axis=1)
+    sbert_r = np.sum(emb_r * emb_ref, axis=1)
+
+    # -----------------
+    # SUMMARY
+    # -----------------
+    results.append({
+        "k": k,
+        "BLEU-1_baseline": np.mean(bleu1_b),
+        "BLEU-1_rag": np.mean(bleu1_r),
+        "BLEU-2_baseline": np.mean(bleu2_b),
+        "BLEU-2_rag": np.mean(bleu2_r),
+        "BLEU-3_baseline": np.mean(bleu3_b),
+        "BLEU-3_rag": np.mean(bleu3_r),
+        "BLEU-4_baseline": np.mean(bleu4_b),
+        "BLEU-4_rag": np.mean(bleu4_r),
+        "ROUGE-L_baseline": np.mean(rouge_b),
+        "ROUGE-L_rag": np.mean(rouge_r),
+        "METEOR_baseline": np.mean(meteor_b),
+        "METEOR_rag": np.mean(meteor_r),
+        "F1_baseline": np.mean(f1_b),
+        "F1_rag": np.mean(f1_r),
+        "EM_baseline": np.mean(em_b),
+        "EM_rag": np.mean(em_r),
+        "BERTScore_baseline": np.mean(bert_f1_b.numpy()),
+        "BERTScore_rag": np.mean(bert_f1_r.numpy()),
+        "SBERT_baseline": np.mean(sbert_b),
+        "SBERT_rag": np.mean(sbert_r)
+    })
+
+df = pd.DataFrame(results)
+df.to_csv("results/summary.csv", index=False)
+
+print("\nFINAL RESULTS:")
+print(df)
+```
+
+if **name** == "**main**":
+evaluate()
