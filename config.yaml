@@ -11,9 +11,10 @@ models:
 
 retrieval:
   k: 5
-  distance: "l2"
+  k_values: [1, 3, 5]
 
 evaluation:
   test_size: 1000
   max_output_tokens: 512
   temperature: 0.0
+  split_seed: 42
