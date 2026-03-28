@@ -1,6 +1,9 @@
 .env
 __pycache__/
 .ipynb_checkpoints/
+*.pyc
+*.pyo
+
 data/*.index
 data/*.faiss
 data/medquad_faiss.index
