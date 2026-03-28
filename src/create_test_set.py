@@ -7,19 +7,19 @@ TEST_SIZE = 1000
 
 os.makedirs("data", exist_ok=True)
 
-# MedQuAD yükle
+# MedQuAD load
 ds = load_dataset("abacha/medquad", split="train")
 df = pd.DataFrame(ds)
 
-# Gerekli kolonlar
+# Required columns
 df = df.dropna(subset=["question", "answer"]).copy()
 df["question"] = df["question"].astype(str).str.strip()
 df["answer"] = df["answer"].astype(str).str.strip()
 
-# 1000 örnek ayır
+# 1000 sample
 test_df = df.sample(n=TEST_SIZE, random_state=SEED).copy()
 
-# Sadece evaluation için gerekli kolonları kaydet
+# save for evaluation
 test_df[["question", "answer"]].to_csv("data/test_set.csv", index=False)
 
 print("Saved:", "data/test_set.csv")
