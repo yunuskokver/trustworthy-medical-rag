@@ -1,29 +1,45 @@
 # Toward Trustworthy Medical QA: Multi-Metric Evidence for RAG-Enhanced Large Language Models
 
 ## 📖 Description
-This repository provides the implementation of a GPT-4-powered Retrieval-Augmented Generation (RAG) framework for **medical question answering**.  
-The system integrates **FAISS-based dense retrieval** with **GPT-4 generation** and is evaluated on the **MedQuAD dataset** using widely adopted computational metrics.
+This repository provides the implementation of a GPT-4-powered Retrieval-Augmented Generation (RAG) framework for medical question answering (MedQA).
+The system integrates FAISS-based dense retrieval with GPT-4 generation and is evaluated using a comprehensive set of widely adopted computational evaluation metrics.
+
+The framework is designed to improve factual reliability, reduce hallucinations, and enhance semantic fidelity in high-stakes domains such as healthcare.
 
 ---
 
 ## 📊 Dataset Information
-- **Name:** MedQuAD (Medical Question Answering Dataset)  
-- **Size:** ~47,000 question–answer pairs  
-- **Source:** [U.S. National Library of Medicine / NIH](https://www.kaggle.com/datasets/pythonafroz/medquad-medical-question-answer-for-ai-research)  
-- **Structure:** Each entry includes a medical question and its expert-curated answer. Categories include symptoms, causes, treatments, and preventive measures.  
-- **Usage in this project:**  
-  - 1,000 randomly sampled Q–A pairs held out as test set.  
-  - Remaining pairs serve as the retrieval corpus for FAISS indexing.  
+MedQuAD (Primary Dataset)
+Name: MedQuAD (Medical Question Answering Dataset)
+Size: ~47,000 question–answer pairs
+Source: U.S. National Library of Medicine (NLM) / NIH
+Access: Loaded automatically via Hugging Face (abacha/medquad)
+Structure: Each entry contains a medical question and a curated answer
+Coverage: Symptoms, causes, treatments, prevention, and other clinical information
+
+Usage in this project:
+
+1,000 randomly sampled Q–A pairs are used as a held-out test set
+Remaining data is used as the retrieval corpus for FAISS indexing
+PubMedQA (Cross-Dataset Evaluation)
+Role: Evaluates generalization under domain shift
+Structure: Expert-annotated biomedical QA pairs derived from PubMed abstracts
+Characteristics: Short, evidence-based answers (more concise than MedQuAD)
+
+Usage in this project:
+
+Used only for evaluation
+No indexing or training is performed on PubMedQA
 
 ---
 
 ## 💻 Code Information
-- **Preprocessing:** Normalizes all text (lowercasing, whitespace cleanup, removal of HTML/non-ASCII characters, punctuation standardization).  
-- **Embedding:** Uses `BAAI/bge-small-en` sentence embedding model; each answer embedded as a single semantic unit.  
-- **Indexing:** FAISS `IndexFlatL2` is used to build a dense retrieval index.  
-- **Retrieval:** Given a user question, top-k relevant answers (default *k* = 5) are retrieved.  
-- **Generation:** Retrieved passages + user query are provided as a structured prompt to GPT-4.  
-- **Evaluation:** System performance measured on 1,000 held-out questions.
+Preprocessing: Lowercasing, whitespace cleanup, HTML artifact removal, and basic punctuation normalization
+Embedding Model: BAAI/bge-small-en
+Indexing: FAISS IndexFlatL2 (exact nearest neighbor search)
+Retrieval: Top-k passages (default: k = 5) selected based on L2 distance
+Generation: Structured prompt combining query and retrieved passages fed into GPT-4
+Evaluation: Multi-metric evaluation including lexical and semantic metrics
 
 ---
 
@@ -116,13 +132,21 @@ results/summary_medquad.csv
 
 ---
 
-### 4. Debug Mode (Recommended)
+### 4. Debug Mode
 
 To test the pipeline with fewer samples:
 
 ```bash
 python src/evaluate.py --config config.yaml --analyze_k --max_examples 10
 ```
+🔑 OpenAI API Key
+
+Set your OpenAI API key before running the scripts.
+
+Linux / Mac
+export OPENAI_API_KEY="your_api_key_here"
+Windows (PowerShell)
+$env:OPENAI_API_KEY="your_api_key_here"
 
 ---
 
@@ -150,17 +174,28 @@ Users do not need to manually prepare any dataset splits.
 ---
 
 ## 📦 Requirements
-- Python 3.9+  
-- Dependencies:  
-  - `faiss-cpu`, `sentence-transformers`, `transformers`, `evaluate`, `nltk`, `openai`, `python-dotenv`, `pyyaml`  
-- See `requirements.txt` for full list.
+Python 3.9+
+Dependencies include:
+faiss-cpu
+sentence-transformers
+transformers
+bert-score
+rouge-score
+nltk
+openai
+python-dotenv
+pyyaml
+
+See requirements.txt for full details.
 
 ---
 
 ## 🧪 Methodology
-1. **Data Preparation:** Normalize and split MedQuAD into train/test subsets.  
-2. **Embedding & Indexing:** Embed answers with BGE model and build FAISS index.  
-3. **Retrieval:** Encode query and retrieve top-k passages.  
-4. **Generation:** Construct prompt and feed into GPT-4.  
-5. **Evaluation:** Report BLEU-1/2/3/4, ROUGE-L, METEOR, token-level F1, and Exact Match.
+Create a held-out evaluation split from MedQuAD
+Build a FAISS index over training answers
+Encode queries using dense embeddings
+Retrieve top-k relevant passages
+Construct a structured prompt
+Generate answers using GPT-4
+Evaluate using lexical and semantic metrics
 
