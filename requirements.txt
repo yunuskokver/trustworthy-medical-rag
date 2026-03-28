@@ -3,19 +3,18 @@ numpy==1.26.4
 pandas==2.2.2
 
 # Embedding & Transformers
-transformers==4.44.2
 sentence-transformers==3.1.1
+transformers==4.41.2
 
 # Retrieval
 faiss-cpu==1.8.0
-# If running on GPU, uncomment the line below:
-# faiss-gpu==1.8.0
 
 # Evaluation metrics
-evaluate==0.4.2
 nltk==3.9.1
+bert-score==0.3.13
+rouge-score==0.1.2
 
-# OpenAI API (official SDK)
+# OpenAI API
 openai==1.45.0
 python-dotenv==1.0.1
 
